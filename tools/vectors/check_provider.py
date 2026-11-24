@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+# ----------------------------------------------------------------------------
+#  Copyright 2026 Raring Group LLC
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+# ----------------------------------------------------------------------------
+
 """Run every golden vector through the *built provider* under real Terraform.
 
 Both entry points are exercised: the `null-context` data source and
@@ -9,7 +25,7 @@ Usage: python3 tools/vectors/check_provider.py --vectors testdata/vectors.json \
 `--provider-dir` must contain the built `terraform-provider-null-context` binary; it is
 wired in with a throw-away dev_overrides CLI config (nothing global is touched).
 """
-import argparse, json, os, shutil, subprocess, sys, tempfile
+import argparse, json, os, shutil, subprocess, sys, tempfile, unicodedata
 
 ADDR = "registry.terraform.io/raringgroup/null-context"
 SCALARS = ["enabled", "namespace", "tenant", "project", "region", "environment", "stage", "name", "delimiter",
@@ -19,6 +35,13 @@ SCALARS = ["enabled", "namespace", "tenant", "project", "region", "environment",
 OUTPUTS = ["id", "id_full", "dns_name", "enabled", "namespace", "tenant", "environment", "name", "stage", "delimiter",
            "attributes", "tags", "additional_tag_map", "label_order", "regex_replace_chars", "id_length_limit",
            "tags_as_list_of_maps", "descriptors", "normalized_context", "legacy", "self", "dns_name_format", "domain_name"]
+
+def nfc(o):
+    """Terraform NFC-normalizes every string (and object key); jsondecode rejects non-NFC keys."""
+    if isinstance(o, str): return unicodedata.normalize("NFC", o)
+    if isinstance(o, list): return [nfc(x) for x in o]
+    if isinstance(o, dict): return {nfc(k): nfc(v) for k, v in o.items()}
+    return o
 
 def main():
     ap = argparse.ArgumentParser()
@@ -37,10 +60,10 @@ def main():
     outs_ds, outs_fn = [], []
     for v in vf["vectors"]:
         n = v["name"]
-        json.dump(v["inputs"], open(os.path.join(work, "j", n + ".vars.json"), "w"))
+        json.dump(nfc(v["inputs"]), open(os.path.join(work, "j", n + ".vars.json"), "w"))
         has_ctx = "context" in v
         if has_ctx:
-            json.dump(v["context"], open(os.path.join(work, "j", n + ".ctx.json"), "w"))
+            json.dump(nfc(v["context"]), open(os.path.join(work, "j", n + ".ctx.json"), "w"))
         if v["kind"] == "base":
             fn_ctx = f'jsondecode(file("j/{n}.ctx.json"))' if has_ctx else "null"
             ds_ctx = f'  context = jsondecode(file("j/{n}.ctx.json"))\n' if has_ctx else ""

@@ -48,7 +48,7 @@ make release-check                           # validate .goreleaser.yml (needs g
 ## Conventions
 - Go files carry `Copyright 2026 Raring Group LLC` + SPDX; `internal/label` also credits Cloud Posse.
 - Docs: sentence case, concise, facts with numbers. Update `SESSION.md` at the end of every working session (what changed, results, open items).
-- **This repo is destined to be public** (Terraform Registry). Never put client names, internal hostnames, local paths, tenant/account IDs or secrets in any file. Example namespace is `acme`; `7pi`/SevenPico appear only as upstream attribution and fixtures.
+- **This repo is destined to be public** (Terraform Registry). Never put client names, internal hostnames, local paths, tenant/account IDs or secrets in any file. Example namespace is `acme`; SevenPico is named only where the upstream registry module is cited as the cross-check reference. Branding and licensing follow the `null-context` module (the reference): full Apache header with `Copyright 2026 Raring Group LLC` + `Copyright 2020-2022 Cloud Posse, LLC` on derived files, a second block `This file contains code ... modified by Raring Group LLC` on ported files, and a NOTICE in the same structure as null-context's.
 - Registry docs (`docs/index.md`, `docs/data-sources/`, `docs/functions/`) are generated; edit the schema descriptions or `examples/`, then `make docs`. `docs/DESIGN.md`, `PARITY.md`, `RELEASE.md` are hand-written.
 
 ## Definition of done for a change

@@ -2,6 +2,16 @@
 
 Newest entry first. Update at the end of every working session. Keep this file free of client names, local paths and IDs (the repo will be public).
 
+## 2026-11-24 - session 5: branding and licensing aligned to the null-context module
+
+**Scope (maintainer):** fix branding in the provider only; `null-context` is the reference (the other modules are not up to date).
+- `NOTICE` now has the same structure as `null-context/NOTICE` (Copyright 2026 Raring Group LLC + 2020-2022 Cloud Posse, LLC; "developed at Raring Group LLC (https://www.raringgroup.com)"; Cloud Posse as Initial Developer) plus one provenance line for the ported label engine. SevenPico is no longer named in the NOTICE (it was copied from the upstream registry module's NOTICE earlier).
+- Go and Python files carry the same full Apache header as `null-context/versions.tf`; `internal/label` (the port) also carries the Cloud Posse line and the second block "This file contains code ported from terraform-null-context and modified by Raring Group LLC"; provider-only files carry the Raring line only.
+- Fixed the module's repo name in docs and code comments: `github.com/raringgroup/terraform-null-context` (was `null-context`).
+- Neutral fixtures: `7pi` -> `acme`, `sevenpico.com` -> `example.com` in vectors, tests, examples and docs (vectors regenerated).
+- LICENSE is byte-identical to the stock Apache-2.0 text used in `null-context` (md5 86d3f3a95c32).
+- Re-verified: Go tests pass, provider parity 361 vectors x 2 x 23 outputs with 0 mismatches, 42/42 mutations killed, docs regenerated, no remaining `7pi`/`sevenpico.com`/wrong repo name.
+
 ## 2026-11-24 - session 4: differential fuzzing -> four more parity fixes
 
 **Goal (from the maintainer):** the provider must behave exactly like the module; nothing else.
@@ -54,7 +64,7 @@ Newest entry first. Update at the end of every working session. Keep this file f
 - **Registry: public Terraform Registry**, `registry.terraform.io/raringgroup/null-context` (address in `main.go` is now the real one).
 
 ### Finding that matters for the migration
-With `project` in `label_order`, a child chained via `normalized_context` loses `project` in its ID (`7pi-dev-...` instead of `7pi-project1-dev-...`) and keeps the parent's `Name` tag; via `self` it is correct. The Go core and provider reproduce both exactly (vectors `proj_order*`, `chain_proj_order_*`, `chain_projorder_*`), so the provider itself changes no IDs. **Action for the maintainer:** audit modules for `normalized_context` chaining before migrating (see `docs/PARITY.md`, `docs/DESIGN.md` migration step 0).
+With `project` in `label_order`, a child chained via `normalized_context` loses `project` in its ID (`acme-dev-...` instead of `acme-project1-dev-...`) and keeps the parent's `Name` tag; via `self` it is correct. The Go core and provider reproduce both exactly (vectors `proj_order*`, `chain_proj_order_*`, `chain_projorder_*`), so the provider itself changes no IDs. **Action for the maintainer:** audit modules for `normalized_context` chaining before migrating (see `docs/PARITY.md`, `docs/DESIGN.md` migration step 0).
 
 ### Work done
 - Vectors: **294** (was 284) + 9 negative, regenerated with Terraform 1.17.2 from the reference module.

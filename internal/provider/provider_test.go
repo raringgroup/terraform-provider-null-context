@@ -1,5 +1,18 @@
-// Copyright 2026 Raring Group LLC
-// SPDX-License-Identifier: Apache-2.0
+// ----------------------------------------------------------------------------
+//  Copyright 2026 Raring Group LLC
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+// ----------------------------------------------------------------------------
 
 package provider_test
 
@@ -89,13 +102,13 @@ func TestDataSource_ExplicitContextReplacesProviderDefaults(t *testing.T) {
 			Config: `
 provider "null-context" { namespace = "ignored" }
 data "null-context" "x" {
-  context = { enabled = true, namespace = "7pi", environment = null, stage = null, name = null, delimiter = null,
+  context = { enabled = true, namespace = "acme", environment = null, stage = null, name = null, delimiter = null,
               attributes = [], tags = {}, additional_tag_map = {}, regex_replace_chars = null, label_order = [],
               id_length_limit = null, label_key_case = null, label_value_case = null, descriptor_formats = {},
               domain_name = null, dns_name_format = null, labels_as_tags = ["unset"] }
   name = "svc"
 }`,
-			Check: resource.TestCheckResourceAttr("data.null-context.x", "id", "7pi-svc"),
+			Check: resource.TestCheckResourceAttr("data.null-context.x", "id", "acme-svc"),
 		}},
 	})
 }
@@ -142,16 +155,16 @@ func TestFunction_Label(t *testing.T) {
 		Steps: []resource.TestStep{{
 			Config: `
 locals {
-  root  = provider::null-context::label(null, { namespace = "7pi", name = "a" })
+  root  = provider::null-context::label(null, { namespace = "acme", name = "a" })
   child = provider::null-context::label(local.root.self, { attributes = ["x"] })
 }
 output "root_id"  { value = local.root.id }
 output "child_id" { value = local.child.id }
 output "child_name_tag" { value = local.child.tags["Name"] }`,
 			Check: resource.ComposeAggregateTestCheckFunc(
-				resource.TestCheckOutput("root_id", "7pi-a"),
-				resource.TestCheckOutput("child_id", "7pi-a-x"),
-				resource.TestCheckOutput("child_name_tag", "7pi-a-x"),
+				resource.TestCheckOutput("root_id", "acme-a"),
+				resource.TestCheckOutput("child_id", "acme-a-x"),
+				resource.TestCheckOutput("child_name_tag", "acme-a-x"),
 			),
 		}},
 	})

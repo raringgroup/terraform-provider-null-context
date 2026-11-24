@@ -1,6 +1,19 @@
-// Copyright 2026 Raring Group LLC
-// Portions Copyright 2020-2022 Cloud Posse, LLC (derived from terraform-null-label)
-// SPDX-License-Identifier: Apache-2.0
+// ----------------------------------------------------------------------------
+//  Copyright 2026 Raring Group LLC
+//  Copyright 2020-2022 Cloud Posse, LLC
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+// ----------------------------------------------------------------------------
 
 package label
 
@@ -65,9 +78,31 @@ func normalize(t *testing.T, v any) any {
 }
 
 func TestParityWithReferenceModule(t *testing.T) {
-	vf := loadVectors(t)
+	runVectors(t, loadVectors(t).Vectors)
+}
+
+// TestFuzzParity replays differential-fuzz files (tools/vectors/fuzz.py -> testdata/fuzz-*.json).
+func TestFuzzParity(t *testing.T) {
+	files, _ := filepath.Glob(filepath.Join("..", "..", "testdata", "fuzz-*.json"))
+	if len(files) == 0 {
+		t.Skip("no testdata/fuzz-*.json; run tools/vectors/fuzz.py")
+	}
+	for _, path := range files {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var vf vectorFile
+		if err := json.Unmarshal(b, &vf); err != nil {
+			t.Fatal(err)
+		}
+		t.Run(filepath.Base(path), func(t *testing.T) { runVectors(t, vf.Vectors) })
+	}
+}
+
+func runVectors(t *testing.T, vectors []vector) {
 	results := map[string]*Result{}
-	for _, v := range vf.Vectors {
+	for _, v := range vectors {
 		v := v
 		t.Run(v.Name, func(t *testing.T) {
 			parent := DefaultContext()

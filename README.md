@@ -1,6 +1,6 @@
 # terraform-provider-null-context
 
-A Terraform provider that replaces the [`null-context`](https://github.com/raringgroup/null-context)
+A Terraform provider that replaces the [`null-context`](https://github.com/raringgroup/terraform-null-context)
 module (a fork of Cloud Posse's `terraform-null-label`). Instead of every module downloading and
 instantiating `module "context" { source = ".../null-context" }`, Terraform downloads one cached
 provider and each module calls `data "null-context" "this" {}` or `provider::null-context::label()`.
@@ -60,8 +60,8 @@ Function form (Terraform >= 1.8, OpenTofu >= 1.7), pure and usable where a data 
 
 ```hcl
 locals {
-  root  = provider::null-context::label(null, { namespace = "7pi", name = "a" })
-  child = provider::null-context::label(local.root.self, { attributes = ["x"] })   # 7pi-a-x
+  root  = provider::null-context::label(null, { namespace = "acme", name = "a" })
+  child = provider::null-context::label(local.root.self, { attributes = ["x"] })   # acme-a-x
 }
 ```
 

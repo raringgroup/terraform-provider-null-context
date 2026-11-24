@@ -1,3 +1,19 @@
+# ----------------------------------------------------------------------------
+#  Copyright 2026 Raring Group LLC
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+# ----------------------------------------------------------------------------
+
 """Deterministic test-case definitions for the null-context reference module.
 
 Produces three groups:
@@ -11,10 +27,10 @@ import copy
 FULL_ORDER = ["namespace", "tenant", "project", "region", "environment", "stage", "name", "attributes"]
 
 RICH = {
-    "enabled": True, "namespace": "7pi", "tenant": "Foo", "project": "Project 1",
+    "enabled": True, "namespace": "acme", "tenant": "Foo", "project": "Project 1",
     "region": "us-east-1", "environment": "dev", "stage": "sandbox-01", "name": "baz",
     "delimiter": "-", "attributes": ["1", "2"], "tags": {"Compliance": "none"},
-    "domain_name": "sevenpico.com", "dns_name_format": "${name}.${domain_name}",
+    "domain_name": "example.com", "dns_name_format": "${name}.${domain_name}",
 }
 MESSY = {
     "namespace": "Acme Corp_X", "tenant": "Ten.ant", "project": "Proj/ect 9", "region": "US East 1",
@@ -115,6 +131,16 @@ def build():
                               "dns_name_format": "${tenant}"})
     add("regex_double_slash", {"name": "a//b", "namespace": "x//y", "regex_replace_chars": "//"})
     add("regex_single_slash_literal", {"name": "a/b/c", "regex_replace_chars": "/"})
+    # Terraform NFC-normalizes every string and measures length by grapheme cluster.
+    add("nfc_decomposed_default", {"namespace": "e\u0301cole", "name": "o\u0323\u0302x", "environment": "a\u0308", "stage": "n\u0303"})
+    for vc in ["lower", "upper", "title", "none"]:
+        add(f"nfc_keep_{vc}", {"namespace": "e\u0301cole", "name": "o\u0323\u0302X\u0131\u0307", "attributes": ["a\u0308", "\u00e4"],
+                               "regex_replace_chars": "/x^/", "label_value_case": vc})
+    GR = "a\u0323\u0301bcdefghij\U0001F468\u200D\U0001F469\u200D\U0001F467klmnop"
+    for dl in ["-", "\U0001F600", "e\u0301", "~~~"]:
+        for lim in [8, 10, 12, 14, 20]:
+            add(f"limit_grapheme_{abs(hash(dl)) % 997}_{lim}".replace("-", "m"), {"name": GR, "namespace": "ns", "regex_replace_chars": "/x^/",
+                                                    "delimiter": dl, "id_length_limit": lim})
     add("limit_nodelim", {**RICH, "delimiter": "", "id_length_limit": 12, "label_order": FULL_ORDER})
     add("limit_bigdelim", {**RICH, "delimiter": "____", "id_length_limit": 14, "label_order": FULL_ORDER})
     add("limit_trailing_delim", {"namespace": "ab", "environment": "cd", "stage": "ef", "name": "gh", "id_length_limit": 9})
@@ -171,7 +197,19 @@ def build():
     }
     for k, d in df.items():
         add(f"desc_{k}", {**RICH, "descriptor_formats": d})
+    # %q is JSON-style quoting in Terraform, not Go's strconv.Quote. Needs a regex that keeps odd characters.
+    ODD = "a\u200db<c>&d\u2028e\u007ff\u0001g\"h\\i\tj\u00a0k\ue000l\u00adm"
+    for k, fm in {"q": "%q", "s": "%s", "mixed": "%q|%s|%v", "width": "%-12q|%5s"}.items():
+        labs = ["name"] * (fm.count("%") - fm.count("%%"))
+        add(f"desc_odd_{k}", {"name": ODD, "regex_replace_chars": "/x^/", "descriptor_formats": {"a": {"format": fm, "labels": labs}}})
     add("desc_upper", {**MESSY, "label_value_case": "upper", "descriptor_formats": df["two"]})
+    # width/precision/flags count grapheme clusters; precision truncates before %q quotes; width pads the quoted text.
+    CMB = "a\u0323\u0301x\U0001F468\u200D\U0001F469\u200D\U0001F467yz"
+    for k, fm in {"w5": "[%5s]", "w_left": "[%-5s]", "w_zero": "[%05s]", "p2": "[%.2s]", "w6p2": "[%6.2s]", "q8": "[%8q]",
+                  "q_left": "[%-8q]", "q_p3": "[%.3q]", "plus": "[%+s]", "space": "[% s]", "hash": "[%#s]",
+                  "v4": "[%4v]", "zero8": "[%08s]", "zero_left8": "[%-08s]", "w8": "[%8s]", "left8": "[%-8s]", "zero_left": "[%-05s]", "p0": "[%.s]", "w_big": "[%20s]"}.items():
+        add(f"desc_fmt_{k}", {"name": CMB, "regex_replace_chars": "/x^/", "descriptor_formats": {"a": {"format": fm, "labels": ["name"]}}})
+        add(f"desc_fmt_ascii_{k}", {"name": "abcdef", "descriptor_formats": {"a": {"format": fm, "labels": ["name"]}}})
     add("desc_ctx_var_merge", {**BASIC, "descriptor_formats": {"v": {"format": "%v", "labels": ["name"]}}},
         ctx(descriptor_formats={"c": {"format": "%v", "labels": ["namespace"]}, "v": {"format": "%v!", "labels": ["name"]}}))
 
@@ -247,6 +285,9 @@ def build():
         "bad_ctx_label_key_case": ({"name": "x"}, ctx(label_key_case="foo"), "Allowed values"),
         "bad_descriptor_too_few_args": ({"name": "x", "descriptor_formats": {"a": {"format": "%s-%s", "labels": ["name"]}}}, None, "format"),
         "bad_descriptor_too_many_args": ({"name": "x", "descriptor_formats": {"a": {"format": "%s", "labels": ["name", "namespace"]}}}, None, "format"),
+        "bad_descriptor_star_width": ({"name": "x", "descriptor_formats": {"a": {"format": "%*s", "labels": ["name"]}}}, None, "format"),
+        "bad_descriptor_verb_d": ({"name": "x", "descriptor_formats": {"a": {"format": "%d", "labels": ["name"]}}}, None, "format"),
+        "bad_descriptor_trailing_pct": ({"name": "x", "descriptor_formats": {"a": {"format": "abc%", "labels": ["name"]}}}, None, "format"),
         "bad_descriptor_label": ({"name": "x", "descriptor_formats": {"a": {"format": "%s", "labels": ["bogus"]}}}, None, "Invalid index"),
     }
     for k, (inp, c, err) in neg.items():

@@ -1,9 +1,27 @@
-// Copyright 2026 Raring Group LLC
-// Portions Copyright 2020-2022 Cloud Posse, LLC (derived from terraform-null-label)
-// SPDX-License-Identifier: Apache-2.0
+// ----------------------------------------------------------------------------
+//  Copyright 2026 Raring Group LLC
+//  Copyright 2020-2022 Cloud Posse, LLC
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+//  ./label.go
+//  This file contains code ported from terraform-null-context and modified by Raring Group LLC
+// ----------------------------------------------------------------------------
 
 // Package label is a faithful Go port of the null-context Terraform module
-// (github.com/raringgroup/null-context). It has no Terraform dependencies so
+// (github.com/raringgroup/terraform-null-context). It has no Terraform dependencies so
 // it can be tested against golden vectors generated from the real module.
 package label
 
@@ -125,6 +143,7 @@ func sval(p *string) string {
 // Compute evaluates the module for a parent context (var.context) and the
 // module's own variables (vars). Pass DefaultContext() when there is no parent.
 func Compute(parent, vars Context) (*Result, error) {
+	parent, vars = normalizeContext(parent), normalizeContext(vars) // cty normalizes every string to NFC
 	// ---- local.input: variables win over the context, except merged fields ----
 	in := Context{
 		Enabled:           vars.Enabled,
@@ -271,7 +290,7 @@ func Compute(parent, vars Context) (*Result, error) {
 	idCtx := map[string]string{
 		"namespace": r.Namespace, "tenant": r.Tenant, "project": r.Project, "region": r.Region,
 		"environment": r.Environment, "stage": r.Stage, "name": r.Name,
-		"attributes": strings.Join(r.Attributes, r.Delimiter),
+		"attributes": nfc(strings.Join(r.Attributes, r.Delimiter)),
 	}
 	labels := []string{}
 	for _, l := range r.LabelOrder {
@@ -283,14 +302,14 @@ func Compute(parent, vars Context) (*Result, error) {
 			labels = append(labels, v)
 		}
 	}
-	r.IDFull = strings.Join(labels, r.Delimiter)
+	r.IDFull = nfc(strings.Join(labels, r.Delimiter))
 	r.ID = r.IDFull
-	if r.IDLengthLimit != 0 && len([]rune(r.IDFull)) > int(r.IDLengthLimit) {
+	if r.IDLengthLimit != 0 && tfStrlen(r.IDFull) > int(r.IDLengthLimit) {
 		limit := int(r.IDLengthLimit)
-		truncLimit := limit - (idHashLength + len([]rune(r.Delimiter)))
+		truncLimit := limit - (idHashLength + tfStrlen(r.Delimiter))
 		truncated := ""
 		if truncLimit > 0 {
-			truncated = strings.TrimSuffix(substrRunes(r.IDFull, truncLimit), r.Delimiter) + r.Delimiter
+			truncated = nfc(strings.TrimSuffix(tfSubstr(r.IDFull, truncLimit), r.Delimiter) + r.Delimiter)
 		}
 		sum := md5.Sum([]byte(r.IDFull)) //nolint:gosec
 		hash := hex.EncodeToString(sum[:]) + hashSuffix
@@ -305,7 +324,7 @@ func Compute(parent, vars Context) (*Result, error) {
 		if hash, err = tfReplace(hash, regex, ""); err != nil {
 			return nil, err
 		}
-		r.ID = substrRunes(truncated+hash, limit)
+		r.ID = tfSubstr(nfc(truncated+hash), limit)
 	}
 
 	// ---- tags ----
@@ -367,7 +386,7 @@ func Compute(parent, vars Context) (*Result, error) {
 		{"environment", r.Environment}, {"name", r.Name}, {"stage", r.Stage}, {"id", r.ID},
 		{"attributes", idCtx["attributes"]}, {"domain_name", r.DomainName}, {"region", r.Region},
 	} {
-		dns = strings.ReplaceAll(dns, "${"+p.k+"}", p.v)
+		dns = nfc(strings.ReplaceAll(dns, "${"+p.k+"}", p.v))
 	}
 	r.DNSName = dns
 

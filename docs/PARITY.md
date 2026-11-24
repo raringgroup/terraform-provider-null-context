@@ -41,15 +41,31 @@ Not blanked: `enabled`, `additional_tag_map`, `label_order`, `regex_replace_char
 | `id_length_limit` is only validated on the variable, `label_*_case` on both context and variable | Validated separately in `Compute`. |
 | Direct `var.context.dns_name_format` access | A context without `domain_name`/`dns_name_format` fails in the module; the port is lenient (treats missing as null). A superset, not a regression. |
 
+## Unicode and `format()` semantics (found by differential fuzzing)
+
+The hand-written vectors passed while random Unicode inputs exposed four differences. All are now reproduced and guarded by vectors
+(`nfc_*`, `limit_grapheme_*`, `desc_odd_*`, `desc_fmt_*`) and by mutations in `tools/mutation/mutate.py`.
+
+| Behaviour in Terraform | Port |
+|---|---|
+| **Every string is NFC-normalized** (cty), including every string function result and object/map keys. `a` + U+0308 becomes `ä`, so the default regex strips it. | `nfc()` on all inputs and after every string step (`normalizeContext`, `tfReplace`, case functions, joins, templates, `format`). |
+| `length()`/`substr()` count **extended grapheme clusters** (an emoji family or `a` + two combining marks is 1). Affects `id_length_limit`, the hash cut and the delimiter length. | `tfStrlen`/`tfSubstr` via `go-textseg/v15`. |
+| `format("%q", s)` is **JSON string quoting** (`encoding/json`, HTML escaping on): escapes `"` `\` control chars `<` `>` `&` U+2028/2029; keeps ZWJ, NBSP, private-use etc. raw. Not `strconv.Quote`. | `jsonQuote`. |
+| `format` width and precision count grapheme clusters; precision truncates **before** `%q` quotes; width pads the quoted text; `%08s` zero-pads, `%-08s` zero-fills on the **right**; `+`, space and `#` are ignored for strings; `%.s` means no precision; `%*s` and other verbs are errors; verb/argument counts must match. | `tfFormat`. |
+
+Method: `tools/vectors/fuzz.py` generates random but valid inputs (words, messy punctuation, accented, decomposed, emoji, ZWJ, control and format
+characters, odd regexes and delimiters, random `label_order`/limits/descriptor formats/dns formats, chained contexts via `self` and
+`normalized_context`), runs them through the reference module in one `terraform apply`, and the Go core and built provider are compared on all 23 outputs.
+
 ## Worked example: `project` in `label_order`, `region` not
 
-Parent: `namespace=7pi, project="Project 1", environment=dev, stage=sandbox-01, name=baz, attributes=[1,2]`,
+Parent: `namespace=acme, project="Project 1", environment=dev, stage=sandbox-01, name=baz, attributes=[1,2]`,
 `label_order=[namespace, project, environment, stage, name, attributes]`. Child adds `name=child, attributes=[x]`.
 
 | Child chained via | Child `id` | Child `Name` tag |
 |---|---|---|
-| `self` | `7pi-project1-dev-sandbox-01-child-1-2-x` (correct) | child's id |
-| `normalized_context` | `7pi-dev-sandbox-01-child-1-2-x` (**`project` lost**) | the **parent's** id |
+| `self` | `acme-project1-dev-sandbox-01-child-1-2-x` (correct) | child's id |
+| `normalized_context` | `acme-dev-sandbox-01-child-1-2-x` (**`project` lost**) | the **parent's** id |
 
 Vectors: `proj_order`, `chain_proj_order_*`, `chain_projorder_child_*`, `chain_projorder_leaf_*`. The Go core and the provider reproduce both rows
 exactly, so migrating does not change IDs; but any module that chains via `normalized_context` has this latent bug today.
@@ -58,8 +74,8 @@ Find them with `grep -rn normalized_context` over your modules before migrating,
 
 ## Not covered (known gaps)
 
-- Grapheme-cluster semantics for `length`/`substr` (port uses runes).
-- `format()` verbs other than `%s %v %q %%` with string arguments.
+- Unicode table drift: the port uses the Unicode tables of the Go toolchain it is built with; Terraform uses its own. Differences are possible only for code points added in the newest Unicode versions.
+- `format()` with non-string arguments (descriptors only ever format strings) and verbs other than `%s %v %q`.
 - Error message text is not compared, only that an error occurs (`vectors.json` records Terraform's text for reference).
 - Real-stack plan diffs (phase 4 was out of scope for now).
 
