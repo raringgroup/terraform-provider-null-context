@@ -18,7 +18,8 @@ make tidy | fmt | vet | build
 make vectors REF_MODULE=../null-context      # needs terraform + python3
 make test                                    # TF_ACC_TERRAFORM_PATH=/path/to/terraform if not on PATH
 make provider-parity                         # all vectors through built provider (data source + function)
-make mutation                                # 32/32 must be killed
+make mutation                                # all must be killed; it refuses to run if the baseline tests fail
+make fuzz FUZZ_SEEDS="1 2 3"                 # differential fuzz vs the reference module; then make fuzz-provider
 make docs                                    # regenerate registry docs after any schema change
 make release-check                           # validate .goreleaser.yml (needs goreleaser + a git remote)
 ```
@@ -38,6 +39,11 @@ make release-check                           # validate .goreleaser.yml (needs g
 - Writing to the user's machine goes through the Filesystem MCP tool; it can hang on an approval prompt. Do work in the sandbox and deliver a zip if it does.
 - Full goreleaser snapshot builds take minutes: validate with `goreleaser check` and a reduced `goos/goarch` config, run long builds in the background.
 - `goreleaser check` needs a git remote (`git remote add origin ...`) or it reports an invalid-config error that is really an environment issue.
+
+- **Hand-written vectors are not enough.** Random Unicode fuzzing found 4 real differences they missed. After any change to string handling run `make fuzz` with new seeds.
+- Terraform NFC-normalizes every string; `length`/`substr`/format width count grapheme clusters; `%q` is JSON quoting, not `strconv.Quote`; `%-08s` zero-fills on the right; `%.s` means no precision. Probe Terraform empirically (small `format()` configs) instead of assuming Go's `fmt` matches.
+- `jsondecode` rejects non-NFC object keys: normalize test inputs to NFC before feeding them to Terraform from Python.
+- A mutation run is only meaningful when the unmodified code passes; the script now enforces it (an earlier run reported "41/41 killed" while the baseline failed).
 
 ## Conventions
 - Go files carry `Copyright 2026 Raring Group LLC` + SPDX; `internal/label` also credits Cloud Posse.

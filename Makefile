@@ -1,4 +1,4 @@
-.PHONY: build test vectors provider-parity mutation verify fmt vet tidy docs release-check
+.PHONY: build test vectors provider-parity mutation verify fmt vet tidy docs release-check fuzz fuzz-provider
 
 # Path to the reference module (a checkout of null-context). Override with REF_MODULE=...
 REF_MODULE ?= ../null-context
@@ -41,3 +41,14 @@ docs:
 # Validate .goreleaser.yml (needs goreleaser and a git remote).
 release-check:
 	goreleaser check
+
+# Differential fuzzing: random valid inputs (incl. Unicode) through the REFERENCE module, replayed against the Go core.
+# Generated files (testdata/fuzz-*.json) are git-ignored. Needs the reference module checkout (REF_MODULE) and terraform.
+FUZZ_SEEDS ?= 1 2 3
+fuzz:
+	for s in $(FUZZ_SEEDS); do python3 tools/vectors/fuzz.py --ref-module $(REF_MODULE) --seed $$s --base 150 --chained 150 --chained2 30 --terraform $(TERRAFORM) || exit 1; done
+	go test -count=1 -run TestFuzzParity ./internal/label/
+
+# Replay every generated fuzz file through the built provider (data source + function) under real Terraform.
+fuzz-provider: build
+	for f in testdata/fuzz-*.json; do python3 tools/vectors/check_provider.py --vectors $$f --provider-dir ./bin --terraform $(TERRAFORM) || exit 1; done

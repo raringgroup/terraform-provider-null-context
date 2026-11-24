@@ -65,6 +65,18 @@ locals {
 }
 ```
 
+### Examples
+
+| Example | Shows | Verified |
+|---|---|---|
+| [`examples/basic`](examples/basic) | Provider defaults, chaining, function | applied |
+| [`examples/module`](examples/module) | A root with provider config and a `data "null-context"` calling child modules that take a `context` variable, chain it onward (`output "context"`), derive sub-labels, and fall back to provider defaults when `context` is null | applied (`terraform_data` stand-ins, no cloud needed) |
+| [`examples/aws`](examples/aws) | Real AWS resources (`aws_s3_bucket`, `aws_sqs_queue`, `aws_iam_role`) named and tagged from the provider; `descriptor_formats`, `id_length_limit`, `tags_as_list_of_maps` | `terraform validate` passes; label values evaluated; not applied (needs credentials) |
+
+The module pattern in one picture: a module takes `variable "context" { type = any, default = null }`, calls
+`data "null-context" "this" { context = var.context  name = var.name }`, uses `.id`/`.tags` on its resources and exposes
+`output "context" { value = data.null-context.this.self }` for its own children.
+
 ### Rules worth knowing
 
 - A data source's own `context` **replaces** the provider-level defaults entirely. Provider defaults apply only when `context` is not set (or null).
@@ -94,7 +106,9 @@ make tidy              # resolve modules, writes go.sum
 make vectors           # regenerate golden vectors by running the REFERENCE MODULE through Terraform
 make test              # Go tests: core parity vs vectors + provider tests driving a real terraform CLI
 make provider-parity   # every vector through the built provider (data source + function)
-make mutation          # 32 mutations of the core; every one must make tests fail
+make mutation          # 42 mutations of the core; every one must make tests fail
+make fuzz              # differential fuzzing vs the reference module (random inputs incl. Unicode)
+make fuzz-provider     # replay the fuzz files through the built provider
 make verify            # vet + test + provider-parity
 ```
 
@@ -115,9 +129,11 @@ internal/label/       Pure-Go port of the module (no Terraform deps). The part t
 internal/provider/    terraform-plugin-framework wrapper: provider config, data source, function, value converters.
 tools/vectors/        cases.py (inputs), gen.py (runs the reference module -> testdata/vectors.json), check_provider.py.
 tools/mutation/       mutate.py - proves the vectors actually guard each behaviour.
-testdata/             vectors.json (generated; 294 vectors + 9 error cases).
+testdata/             vectors.json (generated; 361 vectors + 12 error cases).
 docs/                 PARITY.md (behaviours + quirks), DESIGN.md (decisions, migration sketch, open questions).
 examples/basic/       Minimal usage.
+examples/module/      Root + child modules chaining a context (runs without cloud credentials).
+examples/aws/         AWS resources named and tagged from the provider.
 ```
 
 ## Parity guarantee
@@ -128,8 +144,8 @@ module `SevenPico/context/null` `2.0.0` (commit `a753bc8`), which differs by one
 
 ## Known limits
 
-- `length()`/`substr()` are implemented on runes, Terraform uses grapheme clusters; differs only for exotic Unicode that survives `regex_replace_chars`.
-- `format()` supports string arguments only (`%s`, `%v`, `%q`, `%%`) and errors on argument-count mismatch like Terraform.
+- Behaviour was verified on Terraform 1.8.0 and 1.17.2 only. Unicode tables come from the Go toolchain used to build the provider; a Terraform built with a different Unicode version could differ for characters added in the newest Unicode release.
+- `format()` supports string arguments with `%s %v %q %%`, the `-` and `0` flags, width and precision (counted in grapheme clusters, like Terraform); other verbs and `*` widths are errors, as in Terraform.
 - Not yet published: see [docs/RELEASE.md](docs/RELEASE.md) for the checklist (GPG key, public GitHub repo, registry sign-up).
 
 ## License

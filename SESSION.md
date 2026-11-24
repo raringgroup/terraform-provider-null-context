@@ -2,6 +2,40 @@
 
 Newest entry first. Update at the end of every working session. Keep this file free of client names, local paths and IDs (the repo will be public).
 
+## 2026-11-24 - session 4: differential fuzzing -> four more parity fixes
+
+**Goal (from the maintainer):** the provider must behave exactly like the module; nothing else.
+
+### What was done
+- New `tools/vectors/fuzz.py`: seeded random but valid inputs (ASCII, messy punctuation, accented, decomposed, emoji/ZWJ, control and format characters, odd regexes/delimiters, random `label_order`, limits, descriptor and dns formats, chains via `self`/`normalized_context`) run through the reference module in one `terraform apply`; replayed against the Go core (`TestFuzzParity`) and the built provider (`check_provider.py`).
+- The 294 hand-written vectors all passed, yet the first fuzz batch failed 152 of 330 cases. Four real differences were found and fixed (details and evidence in `docs/PARITY.md`):
+  1. Terraform NFC-normalizes every string (incl. map keys and function results).
+  2. `length`/`substr` count grapheme clusters (`id_length_limit`, hash cut, delimiter length).
+  3. `format("%q")` is JSON quoting (verified by probing 932 code points), not Go's `strconv.Quote`.
+  4. `format` width/precision count grapheme clusters; precision truncates before `%q`; `%-08s` zero-fills on the right; `%.s` = no precision; `%*s` and other verbs are errors.
+- Hand vectors added so the committed suite guards these without the (git-ignored) fuzz files: now **361 vectors + 12 error cases** (`nfc_*`, `limit_grapheme_*`, `desc_odd_*`, `desc_fmt_*`, extra negatives).
+- Mutation suite grew from 32 to **42**; the script now refuses to run when the unmodified code fails.
+- Makefile: `make fuzz FUZZ_SEEDS="..."`, `make fuzz-provider`. Fuzz files are git-ignored (about 1 MB each).
+
+### Results (all after the final code change unless noted)
+- Core: 361 vectors + 12 error cases + **4,290 fuzz vectors (13 seeds)**: 0 mismatches.
+- Built provider under Terraform 1.17.2, data source and function: **361 vectors and fuzz seeds 3, 6, 11, 12, 13: 0 mismatches** (23 outputs each). Seeds 2, 5, 8, 9, 10 also had 0 mismatches but were run before the last two format fixes (`%-08s`, `%.s`); the core passes them again now, the provider run was not repeated on those.
+- Terraform 1.8.0: provider acceptance tests pass; fuzz-13 through the provider: 0 mismatches.
+- Mutation: 42/42 killed with a passing baseline.
+
+### Process notes (honest record)
+- An intermediate run reported "41/41 mutations killed" while a new vector was failing; that number was meaningless. Cause: the failing vector was `%-08s`. The script now aborts on a failing baseline.
+- The checker script initially failed on non-NFC object keys (`jsondecode` limitation); fixed by NFC-normalizing test inputs, not a provider issue.
+
+### Examples added (same session)
+- `examples/module`: provider config + root context + child modules (`context` variable, chained `output "context"`, derived sub-label, null-context fallback to provider defaults). Applied: ids `acme-dev-app`, `-vpc`, `-vpc-private`, `-logs-archive`, `-scratch`; 4 `terraform_data` resources, no cloud needed.
+- `examples/aws`: `aws_s3_bucket`, `aws_sqs_queue`, `aws_iam_role` named/tagged from the provider, `descriptor_formats`, `id_length_limit = 24` (`acme-dev-app-order-e3eb4`). `terraform validate` passes with hashicorp/aws 6.74; label values evaluated via targeted apply; resources not applied (no credentials).
+
+### Open items
+1. Unicode table drift between the Go toolchain and Terraform's build (only for newest code points).
+2. Phase 4 (plan diffs on real stacks) is still pending; the migration/audit work was parked at the maintainer's request.
+3. Release (GPG, GitHub, registry) not started.
+
 ## 2026-11-23 - session 3: provider renamed to `null-context`
 
 **Decision:** the provider is named `null-context` (same name as the module it replaces).
