@@ -1,0 +1,9 @@
+bin/
+dist/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+.work/
+.DS_Store
